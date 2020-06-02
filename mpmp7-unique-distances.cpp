@@ -86,6 +86,8 @@ struct FixedSet {
 struct Size {
     int dim;    // the number of spatial dimensions
     int width;  // the width in one direction.
+    Size() : dim(0), width(0) { }
+    Size(int dim, int width) : dim(dim), width(width) { }
 
     // a method for outputting a Size object.
     friend std::ostream& operator<<(std::ostream& os, const Size& size)
@@ -112,6 +114,12 @@ struct Point {
         n = p.n;
         memcpy(x, p.x, n*sizeof(int));
     }
+
+    static Point make() { Point p(0); return p; }
+    static Point make(int a0) { Point p(1); p[0] = a0; return p; }
+    static Point make(int a0, int a1) { Point p(2); p[0] = a0; p[1] = a1; return p; }
+    static Point make(int a0, int a1, int a2) { Point p(3); p[0] = a0; p[1] = a1; p[2] = a2; return p; }
+    static Point make(int a0, int a1, int a2, int a3) { Point p(4); p[0] = a0; p[1] = a1; p[2] = a2; p[3] = a3; return p; }
 
     // index access to the point's coordinates.
     int& operator[](int i) { return x[i]; }
@@ -181,6 +189,11 @@ struct Arrangement {
     int n;        // the number of counters in this arrangement.
     Arrangement() : n(0) { }
 
+    static Arrangement make() { return Arrangement(); }
+    static Arrangement make(Point p0) { Arrangement a; a.add(p0); return a; }
+    static Arrangement make(Point p0, Point p1) { Arrangement a; a.add(p0); a.add(p1); return a; }
+    static Arrangement make(Point p0, Point p1, Point p2) { Arrangement a; a.add(p0); a.add(p1); a.add(p2); return a; }
+
     // add a point to the Arrangement.
     void add(const Point& p)
     {
@@ -233,14 +246,14 @@ struct Arrangement {
 
 
 /*
- * Generate all possible Arrangementsof 'n' points on the grid.
+ * Generate all possible Arrangementsof 'n' points on the grid in lexicographical order.
  */
 struct generatearrangements {
     struct iter {
         Size size;
         int ncounters;       // the number of counter to place on the grid.
         int totalpositions;  // the number of positions a counter can be in the grid.
-        uint64_t ix;              // index of the current arrangement
+        uint64_t ix;         // index of the current arrangement
 
         std::vector<int> c;
 
@@ -273,17 +286,29 @@ struct generatearrangements {
             auto last = c.end();
             auto i = last;
 
+            if (c[0] == totalpositions-ncounters) {
+                ++ix;
+                return *this;
+            }
             while (*(--i) == totalpositions-(last-i));
-            (*i)++;
-            while (++i != last) *i = *(i-1)+1;
+            if (i >= c.begin()) {
+                (*i)++;
+                while (++i != last) *i = *(i-1)+1;
+            }
 
             ix++;
             return *this;
         }
+        void state(std::ostream& os)
+        {
+            for (int i=0 ; i<c.size() ; i++)
+            {
+                if (i) os << ",";
+                os << c[i];
+            }
+        }
         bool operator!=(const iter& rhs)
         {
-            if (c[0] == totalpositions-ncounters)
-                return false;
             return ix!=rhs.ix;
         }
     };
@@ -386,9 +411,9 @@ Point rotatepoint(Size size, int flip, const Permutation& perm, const Point& p)
 }
 
 /*
- * Return the arragement `a`, rotated and reflected according to `flip` and `perm`.
+ * Return the arrangement `a`, rotated and reflected according to `flip` and `perm`.
  */
-Arrangement rotatearragement(Size size, int flip, const Permutation& perm, const Arrangement& a)
+Arrangement rotatearrangement(Size size, int flip, const Permutation& perm, const Arrangement& a)
 {
     Arrangement b;
     for (auto & p : a)
@@ -416,7 +441,7 @@ bool istransformof(Size size, const Arrangement& a, const Arrangement& b)
     for (int flip = 0 ; flip<nrreflections ; flip++)
     {
         do {
-            if (rotatearragement(size, flip, perm, a) == b)
+            if (rotatearrangement(size, flip, perm, a) == b)
                 return true;
         } while (std::next_permutation(perm.begin(), perm.end()));
     }
@@ -436,6 +461,17 @@ bool containstransform(Size size, const std::vector<Arrangement>& solutions, con
     return false;
 }
 
+// returns the index of the matching solution, or size(solutions)
+auto findprevious(Size size, const std::vector<Arrangement>& solutions, const Arrangement& a)
+{
+    int i = 0;
+    for (auto& b : solutions) {
+        if (istransformof(size, a, b))
+            break;
+        i++;
+    }
+    return i;
+}
 
 /*
  * Generate and print all solutions for a `size` grid with `ncounters` counters.
@@ -488,6 +524,26 @@ void solvegrid(bool printall, int verbose, Size size, int ncounters)
     std::cout << "Found " << solutions.size() << " solutions in " << generatearrangements::totalarrangements(size, ncounters) << " total arangements, in " << (t-t0) << " seconds.\n";
 }
 
+/*
+ * Test arrangements
+ */
+void testgenerator(Size size, int ncounters)
+{
+    int j = 0;
+    std::vector<Arrangement> solutions;
+    for (auto a : generatearrangements(size, ncounters))
+    {
+        auto i = findprevious(size, solutions, a);
+        if (i == solutions.size()) {
+            // a new arrangement
+            solutions.emplace_back(a);
+        }
+        std::cout << j << ": " << i << " " << a << "\n";
+
+        j++;
+    }
+}
+#ifndef NOMAIN
 int main(int argc, char**argv)
 {
     Size size;
@@ -497,17 +553,20 @@ int main(int argc, char**argv)
 
     int verbose = 0;
     bool printall = false;
+    bool dotest = false;
 
     while (argc>=2 && argv[1][0]=='-') {
         if (argv[1][1] == 'p') {
             printall = true;
-            argv++;
-            argc--;
+            argv++; argc--;
         }
         else if (argv[1][1] == 'v') {
             verbose = strlen(argv[1])-1;
-            argv++;
-            argc--;
+            argv++; argc--;
+        }
+        else if (argv[1][1] == 't') {
+            dotest = true;
+            argv++; argc--;
         }
         else {
             std::cout << "Usage: " << argv[0] << " [-p] [-v] [width [dimension [ncounters]]]\n";
@@ -541,5 +600,9 @@ int main(int argc, char**argv)
         std::cout << "WARNING: integer overflow may make this incorrect\n";
     }
 
-    solvegrid(printall, verbose, size, ncounters);
+    if (dotest)
+        testgenerator(size, ncounters);
+    else
+        solvegrid(printall, verbose, size, ncounters);
 }
+#endif
