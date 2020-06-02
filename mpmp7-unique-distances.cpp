@@ -36,7 +36,7 @@ Author: Willem Hengeveld <itsme@xs4all.nl>
 #include <string.h>
 #include <time.h>
 
-#define MAXDIM 7
+#define MAXDIM 8
 #define MAXCOUNTERS 10
 #define MAXSETSIZE (1024*1024)
 
@@ -98,6 +98,26 @@ struct Size {
 
 
 /*
+ * Set of templates for convenient construction of Point and Permutation objects:
+ *    make<Point>(1, 2, 3) 
+ */
+template<typename POINT, int ix, typename T, typename...ARGS>
+static void setcoord(POINT& p, T x, ARGS...args)
+{
+    p[ix] = x;
+    if constexpr (sizeof...(ARGS)>0)
+        setcoord<POINT, ix+1>(p, args...);
+}
+template<typename POINT, typename...ARGS>
+auto make(ARGS...args)
+{
+    POINT p(sizeof...(ARGS));
+    if constexpr (sizeof...(ARGS)>0)
+        setcoord<POINT, 0>(p, args...);
+    return p;
+}
+
+/*
  * a Point keeps the coordinates to a single point in the grid.
  */
 struct Point {
@@ -114,12 +134,6 @@ struct Point {
         n = p.n;
         memcpy(x, p.x, n*sizeof(int));
     }
-
-    static Point make() { Point p(0); return p; }
-    static Point make(int a0) { Point p(1); p[0] = a0; return p; }
-    static Point make(int a0, int a1) { Point p(2); p[0] = a0; p[1] = a1; return p; }
-    static Point make(int a0, int a1, int a2) { Point p(3); p[0] = a0; p[1] = a1; p[2] = a2; return p; }
-    static Point make(int a0, int a1, int a2, int a3) { Point p(4); p[0] = a0; p[1] = a1; p[2] = a2; p[3] = a3; return p; }
 
     // index access to the point's coordinates.
     int& operator[](int i) { return x[i]; }
@@ -157,6 +171,10 @@ struct Point {
     {
         return compare(p, q) < 0;
     }
+    friend bool operator>(const Point& p, const Point& q)
+    {
+        return compare(p, q) > 0;
+    }
     friend bool operator==(const Point& p, const Point& q)
     {
         return compare(p, q) == 0;
@@ -177,7 +195,6 @@ struct Point {
         }
         return total;
     }
-
 };
 
 
@@ -189,12 +206,24 @@ struct Arrangement {
     int n;        // the number of counters in this arrangement.
     Arrangement() : n(0) { }
 
-    static Arrangement make() { return Arrangement(); }
-    static Arrangement make(Point p0) { Arrangement a; a.add(p0); return a; }
-    static Arrangement make(Point p0, Point p1) { Arrangement a; a.add(p0); a.add(p1); return a; }
-    static Arrangement make(Point p0, Point p1, Point p2) { Arrangement a; a.add(p0); a.add(p1); a.add(p2); return a; }
+    template<typename T, typename...ARGS>
+    static void addpoints(Arrangement& a, T x, ARGS...args)
+    {
+        a.add(x);
+        if constexpr (sizeof...(ARGS)>0)
+            addpoints(a, args...);
+    }
 
-    // add a point to the Arrangement.
+    template<typename...ARGS>
+    static auto make(ARGS...args)
+    {
+        Arrangement a;
+        if constexpr (sizeof...(ARGS)>0)
+            addpoints(a, args...);
+        return a;
+    }
+
+    // add a point to the Arrangement, keeping the points sorted.
     void add(const Point& p)
     {
         auto i = std::upper_bound(begin(), end(), p);
@@ -360,21 +389,19 @@ bool hasuniquedistance(Size size, const Arrangement& a)
  */
 void printarrangement(Size size, const Arrangement& a)
 {
-    Point p(size.dim);
-
     if (size.dim == 2) {
-        for (p[1] = 0 ; p[1] < size.width ; p[1]++) {
-            for (p[0] = 0 ; p[0] < size.width ; p[0]++)
-                std::cout << (a.contains(p) ? '*' : '.');
+        for (int y = 0 ; y < size.width ; y++) {
+            for (int x = 0 ; x < size.width ; x++)
+                std::cout << (a.contains(make<Point>(x, y)) ? '*' : '.');
             std::cout << "\n";
         }
         std::cout << "\n";
     }
     else if (size.dim == 3) {
-        for (p[1] = 0 ; p[1] < size.width ; p[1]++) {
-            for (p[2] = 0 ; p[2] < size.width ; p[2]++) {
-                for (p[0] = 0 ; p[0] < size.width ; p[0]++)
-                    std::cout << (a.contains(p) ? '*' : '.');
+        for (int y = 0 ; y < size.width ; y++) {
+            for (int z = 0 ; z < size.width ; z++) {
+                for (int x = 0 ; x < size.width ; x++)
+                    std::cout << (a.contains(make<Point>(x, y, z)) ? '*' : '.');
                 std::cout << "  ";
             }
             std::cout << "\n";
@@ -390,8 +417,23 @@ void printarrangement(Size size, const Arrangement& a)
 /*
  *  Reusing the Point object to represent a permutation.
  */
-typedef Point Permutation;
+struct Permutation {
+    uint8_t x[MAXDIM];
+    int n;
+    Permutation(int n)
+        : n(n)
+    {
+        for (int i=0 ; i<8 ; i++)
+            x[i] = i;
+    }
+    uint8_t operator[](int i) const { return x[i]; }
+    uint8_t& operator[](int i) { return x[i]; }
 
+    bool next()
+    {
+        return std::next_permutation(x, x+n);
+    }
+};
 /*
  * Rotate and reflect a single point `p` according to `perm` and `flip`.
  */
@@ -435,15 +477,13 @@ bool istransformof(Size size, const Arrangement& a, const Arrangement& b)
     int nrreflections = 1<<size.dim;
 
     Permutation perm(size.dim);
-    for (int i=0 ; i < size.dim ; i++)
-        perm[i] = i;
 
     for (int flip = 0 ; flip<nrreflections ; flip++)
     {
         do {
             if (rotatearrangement(size, flip, perm, a) == b)
                 return true;
-        } while (std::next_permutation(perm.begin(), perm.end()));
+        } while (perm.next());
     }
     return false;
 }
