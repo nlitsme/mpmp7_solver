@@ -133,14 +133,14 @@ I did not wait for my program to complete it's search.
 For the 3D and higher dimensional grids you can,
 here is a table of the most markers you can fit for a given size and dimension:
 
-| size/dim  |    2   |      3     |    4     |   5  |   6   |   7   |
+| size/dim  |    2D   |      3D     |    4D     |   5D  |   6D   |   7D   |
 |  ----:|   --------:| ----------:| --------:| ----:| -----:| -----:|    
 | 2     |        2   |      3     |    3     |  3   |  4    |  4    |
 | 3     |        3   |      4     |    5     | >=6  |  >=6  |  4    |
-| 4     |        4   |      6     |   >=7    | >=4  |       |       |
+| 4     |        4   |      6     |   >=7    | >=4  |  >=3  | >=3   |
 | 5     |        5   |     >=7    |          |      |       |       |
 | 6     |        6   |     >=8    |          |      |       |       |
-| 7     |        7   |     >=7    |          |      |       |       |
+| 7     |        7   |     >=8    |          |      |       |       |
 
 
 The empty slots in the table were computationally too expensive to determine.
@@ -180,7 +180,7 @@ Here is a table listing the maximum number of markers you can fit on 2D grids:
 | 10     |   >=8     |
 | 11     |   >=9     |
 | 12     |   >=9     |
-| 13     |   >=8     |
+| 13     |   >=9     |
 | 14     |   >=8     |
 | 15     |   >=8     |
 
