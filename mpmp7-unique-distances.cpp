@@ -415,7 +415,9 @@ void printarrangement(Size size, const Arrangement& a)
 
 
 /*
- *  Reusing the Point object to represent a permutation.
+ *  This object represents a permutation of coordinates.
+ *  It can iterate over all possible permutations, and can
+ *  perform a permutation.
  */
 struct Permutation {
     uint8_t x[MAXDIM];
