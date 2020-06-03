@@ -1,6 +1,6 @@
 -include Makefile.local
 
-CXXFLAGS=-std=c++17 -g $(if $(D),-O0,-O3)
+CXXFLAGS+=-std=c++17 -g $(if $(D),-O0,-O3)
 
 all:: mpmp7-unique-distances unittests
 
@@ -9,9 +9,6 @@ all:: mpmp7-unique-distances unittests
 
 %: %.o
 	$(CXX) $(LDFLAGS) -o $@ $^
-
-mpmp7-unique-distances: mpmp7-unique-distances.o 
-unittests: unittests.o 
 
 clean::
 	$(RM) mpmp7-unique-distances unittests
