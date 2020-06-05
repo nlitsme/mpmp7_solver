@@ -9,6 +9,10 @@ Project with tools for the 7th [Matt Parker Math Puzzle problem](http://think-ma
  * Can I solve this on an 8x8 grid?
  * Do solutions exist for larger 2D grids?
 
+
+Yay, Matt mentiond my solution in [MPMS: Unique Distancing Problem](https://www.youtube.com/watch?v=G0i_YSFvMb0&t=666s)
+BTW, note the time offset 🤘
+ 
 # The problem
 
 Arrange N counters on an NxN grid, such that all the
