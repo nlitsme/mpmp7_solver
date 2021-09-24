@@ -30,6 +30,7 @@ Author: Willem Hengeveld <itsme@xs4all.nl>
 
 
 #include <vector>
+#include <set>
 #include <cmath>
 #include <algorithm>
 #include <iostream>
@@ -226,10 +227,7 @@ struct Arrangement {
     // add a point to the Arrangement, keeping the points sorted.
     void add(const Point& p)
     {
-        auto i = std::upper_bound(begin(), end(), p);
-        memmove(i+1, i, (end()-i)*sizeof(Point));
-        *i = p;
-        n++;
+        counters[n++] = p;
     }
 
     // check if this point is in this arrangement.
@@ -266,48 +264,36 @@ struct Arrangement {
 
     friend bool operator==(const Arrangement& a,const Arrangement& b)
     {
-        for (int i=0 ; i<a.n ; i++)
-            if (a[i]!=b[i])
-                return false;
-        return true;
+        std::set<Point> seta(a.begin(), a.end());
+        std::set<Point> setb(b.begin(), b.end());
+
+        return seta == setb;
     }  
 };
 
 
 /*
- * Generate all possible Arrangementsof 'n' points on the grid in lexicographical order.
+ * Generate all possible combinations of 'nitems' choices of `total` items in lexicographical order.
  */
-struct generatearrangements {
+struct generatecombinations {
     struct iter {
-        Size size;
-        int ncounters;       // the number of counter to place on the grid.
-        int totalpositions;  // the number of positions a counter can be in the grid.
-        uint64_t ix;         // index of the current arrangement
+        int nitems;       // the number of item to place on the grid.
+        int totalchoices;           // the number of positions a item can be in the grid.
 
         std::vector<int> c;
 
-        iter(Size size, int ncounters, uint64_t ix)
-            : size(size), ncounters(ncounters), totalpositions(pow(size.width, size.dim)), ix(ix)
+        iter() : nitems(0), totalchoices(0) { }  // 'end'
+
+        iter(int nitems, uint64_t totalchoices)
+            : nitems(nitems), totalchoices(totalchoices)
         {
-            c.resize(ncounters);
-            for (int i=0 ; i < ncounters ; i++)
+            c.resize(nitems);
+            for (int i=0 ; i < nitems ; i++)
                 c[i] = i;
         }
-        Arrangement operator*()
+        const std::vector<int>& operator*() const
         {
-            Arrangement a;
-            for (int i = 0 ; i < ncounters ; i++)
-                a.add(makepoint(c[i]));
-            return a;
-        }
-        Point makepoint(int encodedpoint)
-        {
-            Point p(size.dim);
-            for (int i=0 ; i < size.dim ; i++) {
-                p[size.dim-1-i] = encodedpoint % size.width;
-                encodedpoint /= size.width;
-            }
-            return p;
+            return c;
         }
         iter& operator++()
         {
@@ -315,17 +301,15 @@ struct generatearrangements {
             auto last = c.end();
             auto i = last;
 
-            if (c[0] == totalpositions-ncounters) {
-                ++ix;
+            if (c[0] == totalchoices-nitems) {
                 return *this;
             }
-            while (*(--i) == totalpositions-(last-i));
+            while (*(--i) == totalchoices-(last-i));
             if (i >= c.begin()) {
                 (*i)++;
                 while (++i != last) *i = *(i-1)+1;
             }
 
-            ix++;
             return *this;
         }
         void state(std::ostream& os)
@@ -336,32 +320,35 @@ struct generatearrangements {
                 os << c[i];
             }
         }
-        bool operator!=(const iter& rhs)
+        bool operator!=(const iter& rhs) const
         {
-            return ix!=rhs.ix;
+            return c[0] != totalchoices-nitems;
         }
     };
 
-    Size size; int ncounters;
-    generatearrangements(Size size, int ncounters)
-        : size(size), ncounters(ncounters)
+    int nitems;
+    int totalchoices;
+    generatecombinations(int nitems, int totalchoices)
+        : nitems(nitems), totalchoices(totalchoices)
     {
     }
-    static uint64_t totalarrangements(Size size, int ncounters)
+    auto begin() { return iter(nitems, totalchoices); }
+    auto end() { return iter(); }
+
+    static uint64_t totalcombinations(int nitems, int totalchoices)
     {
-        if (size.width==0)
+        if (totalchoices==0)
             return 0;
         uint64_t a = 1;
-        uint64_t b = pow(size.width, size.dim);
-        for (int i = 0 ; i < ncounters ; i++) {
+        uint64_t b = totalchoices;
+        for (int i = 0 ; i < nitems ; i++) {
             a *= b;
             a /= i+1;
             b -= 1;
         }
         return a;
+
     }
-    auto begin() { return iter(size, ncounters, 0); }
-    auto end() { return iter(size, ncounters, totalarrangements(size, ncounters)); }
 };
 
 
@@ -515,6 +502,22 @@ auto findprevious(Size size, const std::vector<Arrangement>& solutions, const Ar
     return i;
 }
 
+Point makepoint(Size size, int encodedpoint)
+{
+    Point p(size.dim);
+    for (int i=0 ; i < size.dim ; i++) {
+        p[size.dim-1-i] = encodedpoint % size.width;
+        encodedpoint /= size.width;
+    }
+    return p;
+}
+
+void makeallpoints(std::vector<Point>& pts, Size size)
+{
+    int totalpoints = pow(size.width, size.dim);
+    for (int i=0 ; i<totalpoints ; i++)
+        pts.emplace_back(makepoint(size, i));
+}
 /*
  * Generate and print all solutions for a `size` grid with `ncounters` counters.
  */
@@ -522,16 +525,24 @@ void solvegrid(bool printall, int verbose, Size size, int ncounters)
 {
     std::vector<Arrangement> solutions;
     uint64_t i = 0;
-    uint64_t total = generatearrangements::totalarrangements(size, ncounters);
+    uint64_t total = generatecombinations::totalcombinations(ncounters, pow(size.width, size.dim));
 
     time_t t0 = time(NULL);
 
     int approxpersecond = 0;
+    uint64_t countu = 0;
 
-    for (auto a : generatearrangements(size, ncounters))
+    std::vector<Point> points;
+    makeallpoints(points, size);
+
+    for (auto& c : generatecombinations(ncounters, pow(size.width, size.dim)))
     {
+        Arrangement a;
+        for (int i = 0 ; i < ncounters ; i++)
+            a.add(points[c[i]]);
         if (hasuniquedistance(size, a))
         {
+            countu++;
             if (!containstransform(size, solutions, a)) {
                 solutions.emplace_back(a);
                 if (printall) {
@@ -563,28 +574,10 @@ void solvegrid(bool printall, int verbose, Size size, int ncounters)
     }
     time_t t = time(NULL);
     std::cout << "\n";
-    std::cout << "Found " << solutions.size() << " solutions in " << generatearrangements::totalarrangements(size, ncounters) << " total arangements, in " << (t-t0) << " seconds.\n";
+    std::cout << "Found " << solutions.size() << " solutions in " << total << " total arangements, in " << (t-t0) << " seconds.\n";
+    std::cout << countu << " unique\n";
 }
 
-/*
- * Test arrangements
- */
-void testgenerator(Size size, int ncounters)
-{
-    int j = 0;
-    std::vector<Arrangement> solutions;
-    for (auto a : generatearrangements(size, ncounters))
-    {
-        auto i = findprevious(size, solutions, a);
-        if (i == solutions.size()) {
-            // a new arrangement
-            solutions.emplace_back(a);
-        }
-        std::cout << j << ": " << i << " " << a << "\n";
-
-        j++;
-    }
-}
 #ifndef NOMAIN
 int main(int argc, char**argv)
 {
@@ -595,7 +588,6 @@ int main(int argc, char**argv)
 
     int verbose = 0;
     bool printall = false;
-    bool dotest = false;
 
     while (argc>=2 && argv[1][0]=='-') {
         if (argv[1][1] == 'p') {
@@ -604,10 +596,6 @@ int main(int argc, char**argv)
         }
         else if (argv[1][1] == 'v') {
             verbose = strlen(argv[1])-1;
-            argv++; argc--;
-        }
-        else if (argv[1][1] == 't') {
-            dotest = true;
             argv++; argc--;
         }
         else {
@@ -642,9 +630,6 @@ int main(int argc, char**argv)
         std::cout << "WARNING: integer overflow may make this incorrect\n";
     }
 
-    if (dotest)
-        testgenerator(size, ncounters);
-    else
-        solvegrid(printall, verbose, size, ncounters);
+    solvegrid(printall, verbose, size, ncounters);
 }
 #endif
